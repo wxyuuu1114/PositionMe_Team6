@@ -414,4 +414,23 @@ public class PdrProcessing {
         return averageStepLength;
     }
 
+    public float getPdrX() {
+        return this.positionX;
+    }
+
+    public float getPdrY() {
+        return this.positionY;
+    }
+
+    public float getStepLength() {
+        return this.stepLength;
+    }
+
+    public int getStepCount() {
+        return this.stepCount;
+    }
+
+    public float getElevation() {
+        return this.elevation;
+    }
 }

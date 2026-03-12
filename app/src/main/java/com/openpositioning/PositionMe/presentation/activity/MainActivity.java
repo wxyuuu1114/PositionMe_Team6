@@ -33,6 +33,7 @@ import com.openpositioning.PositionMe.presentation.fragment.SettingsFragment;
 import com.openpositioning.PositionMe.sensors.Observer;
 import com.openpositioning.PositionMe.sensors.SensorFusion;
 import com.openpositioning.PositionMe.utils.PermissionManager;
+import com.openpositioning.PositionMe.utils.TcpClient;
 
 
 import java.util.Objects;
@@ -75,6 +76,7 @@ public class MainActivity extends AppCompatActivity implements Observer {
     private PermissionManager permissionManager;
 
     private static final int PERMISSION_REQUEST_CODE = 100;
+    public static TcpClient tcpClient;
 
     //endregion
 
@@ -114,8 +116,8 @@ public class MainActivity extends AppCompatActivity implements Observer {
         settings.edit().putBoolean("permanentDeny", false).apply();
 
         // Initialize SensorFusion early so that its context is set
-        this.sensorFusion = SensorFusion.getInstance();
-        this.sensorFusion.setContext(getApplicationContext());
+        this.sensorFusion = SensorFusion.getInstance(getApplicationContext());
+        //this.sensorFusion.setContext(getApplicationContext());
 
         // Register multiple permissions launcher
         multiplePermissionsLauncher = registerForActivityResult(
@@ -141,10 +143,10 @@ public class MainActivity extends AppCompatActivity implements Observer {
 
         // Handler for global toasts and popups from other classes
         this.httpResponseHandler = new Handler();
+
+        tcpClient = new TcpClient("172.20.10.3",6000);//IP
+
     }
-
-
-
 
     /**
      * {@inheritDoc}
@@ -267,8 +269,8 @@ public class MainActivity extends AppCompatActivity implements Observer {
 
         // Ensure SensorFusion is initialized with a valid context.
         if (this.sensorFusion == null) {
-            this.sensorFusion = SensorFusion.getInstance();
-            this.sensorFusion.setContext(getApplicationContext());
+            this.sensorFusion = SensorFusion.getInstance(getApplicationContext());
+            //this.sensorFusion.setContext(getApplicationContext());
         }
         sensorFusion.registerForServerUpdate(this);
     }

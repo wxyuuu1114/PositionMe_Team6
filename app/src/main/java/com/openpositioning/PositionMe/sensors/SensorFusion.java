@@ -29,6 +29,7 @@ import com.openpositioning.PositionMe.presentation.fragment.SettingsFragment;
 import com.openpositioning.PositionMe.utils.PathView;
 import com.openpositioning.PositionMe.utils.PdrProcessing;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -81,7 +82,7 @@ public class SensorFusion implements SensorEventListener, Observer {
 
     //region Static variables
     // Singleton Class
-    private static final SensorFusion sensorFusion = new SensorFusion();
+    //private static final SensorFusion sensorFusion = new SensorFusion();
     // Static constant for calculations with milliseconds
     private static final long TIME_CONST = 10;
     // Coefficient for fusing gyro-based and magnetometer-based orientation
@@ -187,6 +188,8 @@ public class SensorFusion implements SensorEventListener, Observer {
 
     private WifiRttManager rttManager;
     private WifiManager wifiManager;
+    private long lastMasterPacketTime =0;
+    private JSONArray latestWifiScan = new JSONArray();
     //region Initialisation
     /**
      * Private constructor for implementing singleton design pattern for SensorFusion.
@@ -227,8 +230,20 @@ public class SensorFusion implements SensorEventListener, Observer {
      *
      * @return  singleton instance of SensorFusion class.
      */
-    public static SensorFusion getInstance() {
-        return sensorFusion;
+    private static volatile SensorFusion instance = null;
+    public static synchronized SensorFusion getInstance(Context context) {
+        if (instance == null){
+            instance = new SensorFusion();
+            instance.setContext(context.getApplicationContext());
+        }
+        return instance;
+    }
+
+    public static SensorFusion getInstance(){
+        if(instance == null){
+            throw new IllegalStateException("SensorFusion not initialised.");
+        }
+        return instance;
     }
 
     /**
@@ -248,6 +263,8 @@ public class SensorFusion implements SensorEventListener, Observer {
     public void setContext(Context context) {
         this.appContext = context.getApplicationContext(); // store app context for later use
 
+        //SensorManager for registering listeners
+        SensorManager sm = (SensorManager)this.appContext.getSystemService(Context.SENSOR_SERVICE);
         // Initialise data collection devices (unchanged)...
         this.accelerometerSensor = new MovementSensor(context, Sensor.TYPE_ACCELEROMETER);
         this.barometerSensor = new MovementSensor(context, Sensor.TYPE_PRESSURE);
@@ -332,12 +349,19 @@ public class SensorFusion implements SensorEventListener, Observer {
         eventCounts.put(sensorType, eventCounts.getOrDefault(sensorType, 0) + 1);
 
 
-
         switch (sensorType) {
             case Sensor.TYPE_ACCELEROMETER:
                 acceleration[0] = sensorEvent.values[0];
                 acceleration[1] = sensorEvent.values[1];
                 acceleration[2] = sensorEvent.values[2];
+
+                String jsonAccel = "{"
+                        + "\"type\":\"accelerometer\","
+                        + "\"x\":" + acceleration[0] + ","
+                        + "\"y\":" + acceleration[1] + ","
+                        + "\"z\":" + acceleration[2]
+                        + "}\n";
+                MainActivity.tcpClient.send(jsonAccel);
                 break;
 
             case Sensor.TYPE_PRESSURE:
@@ -353,12 +377,29 @@ public class SensorFusion implements SensorEventListener, Observer {
                 angularVelocity[0] = sensorEvent.values[0];
                 angularVelocity[1] = sensorEvent.values[1];
                 angularVelocity[2] = sensorEvent.values[2];
+
+                String jsonGyro = "{"
+                        + "\"type\":\"gyroscope\","
+                        + "\"x\":" + angularVelocity[0] + ","
+                        + "\"y\":" + angularVelocity[1] + ","
+                        + "\"z\":" + angularVelocity[2]
+                        + "}\n";
+                MainActivity.tcpClient.send(jsonGyro);
                 break;
 
             case Sensor.TYPE_LINEAR_ACCELERATION:
                 filteredAcc[0] = sensorEvent.values[0];
                 filteredAcc[1] = sensorEvent.values[1];
                 filteredAcc[2] = sensorEvent.values[2];
+
+                String jsonLinAcc = "{"
+                        + "\"type\":\"linear_acceleration\","
+                        + "\"x\":" + filteredAcc[0] + ","
+                        + "\"y\":" + filteredAcc[1] + ","
+                        + "\"z\":" + filteredAcc[2]
+                        + "}\n";
+
+                MainActivity.tcpClient.send(jsonLinAcc);
 
                 // Compute magnitude & add to accelMagnitude
                 double accelMagFiltered = Math.sqrt(
@@ -381,6 +422,15 @@ public class SensorFusion implements SensorEventListener, Observer {
                 gravity[1] = sensorEvent.values[1];
                 gravity[2] = sensorEvent.values[2];
 
+                String jsonGravity = "{"
+                        + "\"type\":\"gravity\","
+                        + "\"x\":" + gravity[0] + ","
+                        + "\"y\":" + gravity[1] + ","
+                        + "\"z\":" + gravity[2]
+                        + "}\n";
+
+                MainActivity.tcpClient.send(jsonGravity);
+
                 // Possibly log gravity values if needed
                 //Log.v("SensorFusion", "Gravity: " + Arrays.toString(gravity));
 
@@ -399,6 +449,15 @@ public class SensorFusion implements SensorEventListener, Observer {
                 magneticField[0] = sensorEvent.values[0];
                 magneticField[1] = sensorEvent.values[1];
                 magneticField[2] = sensorEvent.values[2];
+
+                String jsonMag = "{"
+                        + "\"type\":\"magnetic\","
+                        + "\"x\":" + magneticField[0] + ","
+                        + "\"y\":" + magneticField[1] + ","
+                        + "\"z\":" + magneticField[2]
+                        + "}\n";
+
+                MainActivity.tcpClient.send(jsonMag);
                 break;
 
             case Sensor.TYPE_ROTATION_VECTOR:
@@ -406,6 +465,15 @@ public class SensorFusion implements SensorEventListener, Observer {
                 float[] rotationVectorDCM = new float[9];
                 SensorManager.getRotationMatrixFromVector(rotationVectorDCM, this.rotation);
                 SensorManager.getOrientation(rotationVectorDCM, this.orientation);
+
+                String jsonRot = "{"
+                        + "\"type\":\"rotation\","
+                        + "\"azimuth\":" + orientation[0] + ","
+                        + "\"pitch\":" + orientation[1] + ","
+                        + "\"roll\":" + orientation[2]
+                        + "}\n";
+
+                MainActivity.tcpClient.send(jsonRot);
                 break;
 
             case Sensor.TYPE_STEP_DETECTOR:
@@ -416,9 +484,7 @@ public class SensorFusion implements SensorEventListener, Observer {
                     Log.e("SensorFusion", "Ignoring step event, too soon after last step event:" + (currentTime - lastStepTime) + " ms");
                     // Ignore rapid successive step events
                     break;
-                }
-
-                else {
+                } else {
                     lastStepTime = currentTime;
                     // Log if accelMagnitude is empty
                     if (accelMagnitude.isEmpty()) {
@@ -435,6 +501,15 @@ public class SensorFusion implements SensorEventListener, Observer {
                             this.accelMagnitude,
                             this.orientation[0]
                     );
+
+                    String jsonStep = "{"
+                            + "\"type\":\"step\","
+                            + "\"x\":" + newCords[0] + ","
+                            + "\"y\":" + newCords[1] + ","
+                            + "\"heading\":" + this.orientation[0]
+                            + "}\n";
+
+                    MainActivity.tcpClient.send(jsonStep);
 
                     // Clear the accelMagnitude after using it
                     this.accelMagnitude.clear();
@@ -453,12 +528,52 @@ public class SensorFusion implements SensorEventListener, Observer {
                 }
 
         }
+
+        //Send Master Packet (Throttled to run at max once every 50ms
+        if (currentTime - lastMasterPacketTime >= 1000) { //1000ms=1s
+            try {
+                JSONObject packet = new JSONObject();
+                packet.put("timestamp", currentTime);
+                packet.put("device_id", Build.MODEL);
+
+                // IMU Data (Accelerometer, Gyro, Mag)
+                JSONObject imu = new JSONObject();
+                imu.put("accel_x", acceleration[0]);
+                imu.put("accel_y", acceleration[1]);
+                imu.put("accel_z", acceleration[2]);
+                imu.put("gyro_x", angularVelocity[0]);
+                imu.put("gyro_y", angularVelocity[1]);
+                imu.put("gyro_z", angularVelocity[2]);
+                imu.put("mag_x", magneticField[0]);
+                packet.put("imu", imu);
+
+                //PDR Data
+                JSONObject pdr = new JSONObject();
+                pdr.put("x", pdrProcessing.getPdrX());
+                pdr.put("y", pdrProcessing.getPdrY());
+                pdr.put("heading", orientation[0]);
+                packet.put("pdr", pdr);
+
+                //Wifi data
+                packet.put("wifi",latestWifiScan);
+
+                // Send master packet with newline
+                MainActivity.tcpClient.send(packet.toString() + "\n");
+
+                // Update the throttle tracker
+                lastMasterPacketTime = currentTime;
+
+            } catch (Exception e) {
+                Log.e("JSON_ERROR", "Failed to send Master JSON", e);
+            }
+        }
     }
 
     /**
      * Utility function to log the event frequency of each sensor.
      * Call this periodically for debugging purposes.
      */
+
     public void logSensorFrequencies() {
         for (int sensorType : eventCounts.keySet()) {
             Log.d("SensorFusion", "Sensor " + sensorType + " | Event Count: " + eventCounts.get(sensorType));
@@ -555,7 +670,26 @@ public class SensorFusion implements SensorEventListener, Observer {
      */
     @Override
     public void update(Object[] wifiList) {
+        //Check if the wifiList is null or empty before processing
+        if(wifiList == null || wifiList.length == 0 ){
+            Log.e("WiFi Data","wifiList is null or empty");
+            return;
+        }
         this.wifiList = Stream.of(wifiList).map(o -> (Wifi) o).collect(Collectors.toList());
+
+        //Prepare for JSON Packet
+        try{
+            JSONArray tempArray = new JSONArray();
+            for (Wifi data : this.wifiList) {
+                JSONObject ap = new JSONObject();
+                ap.put("bssid", data.getBssid());
+                ap.put("rssi", data.getLevel());
+                tempArray.put(ap);
+            }
+            this.latestWifiScan = tempArray;
+        } catch(JSONException e){
+            e.printStackTrace();
+        }
 
         if(this.saveRecording) {
             long relativeTs = SystemClock.uptimeMillis() - bootTime;
@@ -1101,7 +1235,7 @@ public class SensorFusion implements SensorEventListener, Observer {
     public synchronized int recordGnssTestPointAt(double lat, double lon, double alt) {
         if (!saveRecording || trajectory == null) return -1;
 
-        long ts = android.os.SystemClock.uptimeMillis() - bootTime;
+        long ts = SystemClock.uptimeMillis() - bootTime;
 
         Traj.GNSSPosition tp = Traj.GNSSPosition.newBuilder()
                 .setRelativeTimestamp(ts)
